@@ -3,9 +3,36 @@ var express = require("express"),
   app = express(),
   bodyParser = require("body-parser"),
   methodOverride = require("method-override");
+
+// new additions 
+  cookieParser = require('cookie-parser'),
+  session = require('express-session'),
+  passport = require('passport'),
+  LocalStrategy = require('passport-local').Strategy;
+
 // require Post model
 var db = require("./models"),
   Post = db.Post;
+  User = db.User;
+
+// middleware for auth 
+app.use(cookieParser());
+app.use(session({
+  secret: 'supersecretkey', // change this!
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+
+// passport config
+passport.use(new LocalStrategy(User.authenticate()));
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+
 
 // configure bodyParser (for receiving form data)
 app.use(bodyParser.urlencoded({ extended: true, }));
@@ -18,15 +45,49 @@ app.set("view engine", "ejs");
 
 app.use(methodOverride("_method"));
 
+// AUTH ROUTES
+
+// show signup view
+app.get('/signup', function (req, res) {
+ res.render('signup');
+});
+
+app.post('/signup', function (req, res){
+  User.register(new User({ username: req.body.username}), req.body.password,
+    function (err, newUser){
+      passport.authenticate('local')(req, res, function(){
+        res.redirect('/');
+      })
+    });
+});
+
+// show login view
+app.get('/login', function (req, res) {
+ res.render('login');
+});
+
+// log in user
+app.post('/login', passport.authenticate('local'), function (req, res) {
+  console.log(req.user);
+  res.redirect('/'); 
+});
+
+// log out user
+app.get('/logout', function (req, res) {
+  console.log("BEFORE logout", JSON.stringify(req.user));
+  req.logout();
+  console.log("AFTER logout", JSON.stringify(req.user));
+  res.redirect('/');
+});
+
 
 // HOMEPAGE ROUTE
-
 app.get("/", function (req, res) {
   Post.find(function (err, allPosts) {
     if (err) {
       res.status(500).json({ error: err.message, });
     } else {
-      res.render("index", { posts: allPosts, });
+      res.render("index", {user: req.user, posts: allPosts,});
     }
   });
 });
